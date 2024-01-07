@@ -3,16 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-char const* typenames[] = {
-    "STR",
-    "WSP",
-    "EQ",
-    "SEMI",
-    "AND",
-    "AMP",
-    "PIPE",
-    "LAR",
-    "RAR",
+static char const* typenames[] = {
+    "T_STR",
+    "T_EQ",
+    "T_SEMI",
+    "T_AND",
+    "T_AMP",
+    "T_OR",
+    "T_PIPE",
+    "T_LAR",
+    "T_RAR",
 };
 
 static FILE* fs;
@@ -36,22 +36,22 @@ static void append_token_list(token_list_t* tl, token_t t)
     tl->tokens[tl->nr] = t;
     tl->nr++;
 }
-void print_token_list(token_list_t const* tl)
+void print_token_list(token_list_t tl)
 {
     printf("Tokens:\n");
-    for (int i = 0; i < tl->nr; ++i) {
-        printf(" %s", typenames[tl->tokens[i].type]);
-        if (tl->tokens[i].type == STR)
-            printf("[%s]", tl->tokens[i].str);
+    for (int i = 0; i < tl.nr; ++i) {
+        printf(" %s", typenames[tl.tokens[i].type]);
+        if (tl.tokens[i].type == T_STR)
+            printf("[%s]", tl.tokens[i].str);
     }
     printf("\n");
 }
-void free_token_list(token_list_t* tl)
+void free_token_list(token_list_t tl)
 {
-    for (int i = 0; i < tl->nr; ++i)
-        if (tl->tokens[i].type == STR)
-            free(tl->tokens[i].str);
-    free(tl->tokens);
+    for (int i = 0; i < tl.nr; ++i)
+        if (tl.tokens[i].type == T_STR)
+            free(tl.tokens[i].str);
+    free(tl.tokens);
 }
 
 // TODO Implement multi-line commands using '\' at end
@@ -167,26 +167,30 @@ token_list_t get_tokens(void)
         token_t t = { 0, NULL };
         switch (*ptr) {
         case ';':
-            t.type = SEMI;
+            t.type = T_SEMI;
             break;
         case '&':
             if (*(ptr + 1) == '&') {
-                t.type = AND;
+                t.type = T_AND;
                 ptr++;
             } else
-                t.type = AMP;
+                t.type = T_AMP;
             break;
         case '|':
-            t.type = PIPE;
+            if (*(ptr + 1) == '|') {
+                t.type = T_OR;
+                ptr++;
+            } else
+                t.type = T_PIPE;
             break;
         case '<':
-            t.type = LAR;
+            t.type = T_LAR;
             break;
         case '>':
-            t.type = RAR;
+            t.type = T_RAR;
             break;
         case '"':
-            t.type = STR;
+            t.type = T_STR;
             {
                 ptr++;
                 int n;
@@ -196,13 +200,12 @@ token_list_t get_tokens(void)
             break;
         case ' ':
         case '\t':
+            // skip over whitespaces
             while (*ptr == ' ' || *ptr == '\t')
                 ptr++;
-            ptr--;
-            t.type = WSP;
-            break;
+            continue;
         default:
-            t.type = STR;
+            t.type = T_STR;
             {
                 int n;
                 t.str = scan_string(ptr, &n);
