@@ -1,11 +1,13 @@
 #define _GNU_SOURCE
 #include <builtins.h>
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <parser.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -99,8 +101,18 @@ void run(node_t* tree)
         if (is_builtin(n->cmd[0]))
             builtin(n->cmd);
         else {
+            int errpipe[2];
+            if (pipe(errpipe) == -1) {
+                post_err("pipe failed");
+                return;
+            }
+
             int p = fork();
             if (p == 0) {
+                close(errpipe[0]);
+                int flags = fcntl(errpipe[1], F_GETFD);
+                fcntl(errpipe[1], flags | O_CLOEXEC);
+
                 if (n->in != NULL) {
                     dup2(n->in->fd, STDIN_FILENO);
                     close(n->in->fd);
@@ -109,8 +121,29 @@ void run(node_t* tree)
                     dup2(n->out->fd, STDOUT_FILENO);
                     close(n->out->fd);
                 }
-                execvpe(n->cmd[0], n->cmd, env.global);
+                if (execvpe(n->cmd[0], n->cmd, env.global) == -1) {
+                    write(errpipe[1], &errno, sizeof(errno));
+                    close(errpipe[1]);
+                    exit(0);
+                }
             } else {
+                close(errpipe[1]);
+
+                int exec_errno;
+
+                if (read(errpipe[0], &exec_errno, 4) > 0) {
+                    switch (exec_errno) {
+                    case ENOENT:
+                        post_err("%s: file not found", n->cmd[0]);
+                        break;
+                    default:
+                        post_err("%s: unknown error: %s", n->cmd[0], strerror(exec_errno));
+                    }
+                    close(errpipe[0]);
+                    return;
+                }
+                close(errpipe[0]);
+
                 if (n->in != NULL) {
                     close(n->in->fd);
                     n->in->fd = -1;

@@ -1,7 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#include <stdio.h>
+#include <stddef.h>
 
 typedef enum token_type {
     T_STR, // [^;&|<> \t]+
@@ -24,8 +24,7 @@ typedef struct token_list {
     size_t nr, cap;
 } token_list_t;
 
-void init_lexer(FILE* f);
-token_list_t get_tokens(void);
+token_list_t get_tokens(char const* input);
 
 void print_token_list(token_list_t tl);
 void free_token_list(token_list_t tl);

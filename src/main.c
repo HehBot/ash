@@ -31,19 +31,39 @@ char const* get_prompt(void)
     return "$";
 }
 
+static char* get_input(FILE* fs)
+{
+    char* input = NULL;
+    size_t len = 0;
+
+    int nr_char = getline(&input, &len, fs);
+
+    if (nr_char == -1)
+        return NULL;
+
+    input[nr_char - 1] = '\0';
+
+    return input;
+}
+
 int main(int argc, char** argv, char** envp)
 {
-    init_lexer(stdin);
     init_env(envp);
 
     while (1) {
         printf("%s ", get_prompt());
 
-        token_list_t tl = get_tokens();
+        char* input = get_input(stdin);
+        if (input == NULL) // EOF or Ctrl-D
+            break;
+
+        token_list_t tl = get_tokens(input);
+        free(input);
+
         node_t* n = parse_tokens(tl);
         if (handle_err()) {
-            free_token_list(tl);
             free_run_tree(n);
+            free_token_list(tl);
             continue;
         }
 
@@ -53,4 +73,6 @@ int main(int argc, char** argv, char** envp)
         free_run_tree(n);
         free_token_list(tl);
     }
+
+    return 0;
 }

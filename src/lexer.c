@@ -14,8 +14,6 @@ static char const* typenames[] = {
     "T_RAR",
 };
 
-static FILE* fs;
-
 static token_list_t mk_token_list(void)
 {
 #define CAP 5
@@ -53,23 +51,11 @@ void free_token_list(token_list_t tl)
     free(tl.tokens);
 }
 
-// TODO Implement multi-line commands using '\' at end
-static char* get_input(void)
-{
-    char* input = NULL;
-    size_t len = 0;
-
-    int nr_char = getline(&input, &len, fs);
-    input[nr_char - 1] = '\0';
-
-    return input;
-}
-
 static int is_str_char(char c)
 {
     return c != ';' && c != '&' && c != '|' && c != '<' && c != '>' && c != ' ' && c != '\t';
 }
-static char* scan_quoted_string(char* ptr, int* n)
+static char* scan_quoted_string(char const* ptr, int* n)
 {
 #define CAP 10
     int cap = CAP;
@@ -106,7 +92,7 @@ static char* scan_quoted_string(char* ptr, int* n)
     *n = len;
     return ans;
 }
-static char* scan_string(char* ptr, int* n)
+static char* scan_string(char const* ptr, int* n)
 {
 #define CAP 10
     int cap = CAP;
@@ -152,16 +138,11 @@ static char* scan_string(char* ptr, int* n)
     return ans;
 }
 
-void init_lexer(FILE* _fs)
+token_list_t get_tokens(char const* input)
 {
-    fs = _fs;
-}
-token_list_t get_tokens(void)
-{
-    char* line = get_input();
     token_list_t tl = mk_token_list();
 
-    char* ptr = line;
+    char const* ptr = input;
     while (*ptr != '\0') {
         token_t t = { 0, NULL };
         switch (*ptr) {
@@ -216,6 +197,5 @@ token_list_t get_tokens(void)
         append_token_list(&tl, t);
         ptr++;
     }
-    free(line);
     return tl;
 }
