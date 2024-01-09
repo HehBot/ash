@@ -19,9 +19,9 @@ typedef struct stream {
 
 typedef enum node_type {
     N_EXEC,
-    N_CHAIN,
     N_SUCC,
     N_FAIL,
+    N_CHAIN,
 } node_type_t;
 
 typedef struct node {
@@ -42,6 +42,5 @@ typedef struct node {
 } node_t;
 
 node_t* parse_tokens(token_list_t tl);
-void free_run_tree(node_t* n);
 
 #endif // PARSER_H

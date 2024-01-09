@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <builtins.h>
+#include <err.h>
 #include <fcntl.h>
 #include <parser.h>
 #include <stdarg.h>
@@ -9,13 +10,67 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void sem_error(char const* s, ...)
+void free_run_tree(node_t* n)
 {
-    fprintf(stderr, "ash: Error: ");
-    va_list argptr;
-    va_start(argptr, s);
-    vfprintf(stderr, s, argptr);
-    exit(1);
+    while (n != NULL) {
+        node_t* next = n->next;
+        if (n->in != NULL && n->in->fd != -1)
+            close(n->in->fd);
+        free(n->in);
+        if (n->out != NULL && n->out->fd != -1)
+            close(n->out->fd);
+        free(n->out);
+        free(n->cmd);
+        free(n);
+        n = next;
+    }
+}
+
+static int handle_pipe(stream_t* read_end, stream_t* write_end)
+{
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        post_err("pipe failed");
+        return 0;
+    }
+    read_end->fd = pipefd[0];
+    write_end->fd = pipefd[1];
+    return 1;
+}
+
+int handle_streams(node_t* n)
+{
+    stream_t* s = n->in;
+    if (s != NULL && s->fd == -1) {
+        switch (s->type) {
+        case S_PIPE:
+            if (!handle_pipe(s, s->pipe_other_end))
+                return 0;
+            break;
+        case S_FILE:
+            if ((s->fd = open(s->filename, O_RDONLY)) == -1) {
+                post_err("unable to open file '%s' for reading redirection", s->filename);
+                return 0;
+            }
+        }
+    }
+
+    s = n->out;
+    if (s != NULL && s->fd == -1) {
+        switch (s->type) {
+        case S_PIPE:
+            if (!handle_pipe(s->pipe_other_end, s))
+                return 0;
+            break;
+        case S_FILE:
+            if ((s->fd = open(s->filename, O_WRONLY | O_CREAT | O_TRUNC, 0644)) == -1) {
+                post_err("unable to open file '%s' for writing redirection", s->filename);
+                return 0;
+            }
+        }
+    }
+
+    return 1;
 }
 
 struct {
@@ -34,29 +89,8 @@ void run(node_t* tree)
     node_t* n = tree;
 
     while (n != NULL) {
-        if (n->in != NULL && n->in->fd == -1) {
-            if (n->in->type == S_PIPE) {
-                int pipefd[2];
-                if (pipe(pipefd) == -1)
-                    sem_error("pipe failed");
-                n->in->fd = pipefd[0];
-                n->in->pipe_other_end->fd = pipefd[1];
-            } else {
-                if ((n->in->fd = open(n->in->filename, O_RDONLY)) == -1)
-                    sem_error("unable to open file %s for reading", n->in->filename);
-            }
-        } else if (n->out != NULL && n->out->fd == -1) {
-            if (n->out->type == S_PIPE) {
-                int pipefd[2];
-                if (pipe(pipefd) == -1)
-                    sem_error("pipe failed");
-                n->out->fd = pipefd[1];
-                n->out->pipe_other_end->fd = pipefd[0];
-            } else {
-                if ((n->out->fd = open(n->out->filename, O_WRONLY | O_CREAT | O_TRUNC, 0644)) == -1)
-                    sem_error("unable to open file %s for writing", n->out->filename);
-            }
-        }
+        if (!handle_streams(n))
+            return;
         n = n->next;
     }
 
@@ -77,10 +111,14 @@ void run(node_t* tree)
                 }
                 execvpe(n->cmd[0], n->cmd, env.global);
             } else {
-                if (n->in != NULL)
+                if (n->in != NULL) {
                     close(n->in->fd);
-                if (n->out != NULL)
+                    n->in->fd = -1;
+                }
+                if (n->out != NULL) {
                     close(n->out->fd);
+                    n->out->fd = -1;
+                }
                 n->pid = p;
             }
         }

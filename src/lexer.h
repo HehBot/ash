@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 typedef enum token_type {
-    T_STR, // [a-zA-Z0-9-_/.]+
+    T_STR, // [^;&|<> \t]+
     T_SEMI, // ;
     T_AND, // &&
     T_AMP, // &

@@ -5,7 +5,6 @@
 
 static char const* typenames[] = {
     "T_STR",
-    "T_EQ",
     "T_SEMI",
     "T_AND",
     "T_AMP",
@@ -68,7 +67,7 @@ static char* get_input(void)
 
 static int is_str_char(char c)
 {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '/' || c == '.';
+    return c != ';' && c != '&' && c != '|' && c != '<' && c != '>' && c != ' ' && c != '\t';
 }
 static char* scan_quoted_string(char* ptr, int* n)
 {
@@ -116,7 +115,7 @@ static char* scan_string(char* ptr, int* n)
     int len = 0;
     *n = 0;
 
-    while (is_str_char(*ptr) || *ptr == '\\') {
+    while (*ptr != '\0' && (is_str_char(*ptr) || *ptr == '\\')) {
         if (len >= cap - 1) {
             cap *= 2;
             ans = realloc(ans, cap + 1);
@@ -217,5 +216,6 @@ token_list_t get_tokens(void)
         append_token_list(&tl, t);
         ptr++;
     }
+    free(line);
     return tl;
 }

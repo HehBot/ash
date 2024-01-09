@@ -1,6 +1,6 @@
 CC := gcc
 LD := gcc
-TARGET_NAME := abash
+TARGET_NAME := ash
 
 BUILD_DIR := build
 BIN_DIR := bin
@@ -31,6 +31,6 @@ $(BUILD_DIR)/%.c.o:%.c
 .PHONY: all clean test
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 -include $(DEPS)
