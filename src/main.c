@@ -1,6 +1,7 @@
 #include <lexer.h>
 #include <parser.h>
 #include <run.h>
+#include <shell.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,17 +34,44 @@ char const* get_prompt(void)
 
 static char* get_input(FILE* fs)
 {
-    char* input = NULL;
-    size_t len = 0;
+    char* buf = NULL;
+    size_t bufsize = 0;
 
-    int nr_char = getline(&input, &len, fs);
+    int len = getline(&buf, &bufsize, fs);
 
-    if (nr_char == -1)
+    if (len == -1)
         return NULL;
 
-    input[nr_char - 1] = '\0';
+    buf[len - 1] = '\0'; // buf is of the form "...\n"
+    len--;
 
-    return input;
+    while (buf[len - 1] == '\\') {
+        buf[len - 1] = '\0';
+        len--;
+
+        printf("> ");
+        char* secondbuf = NULL;
+        size_t secondbufsize = 0;
+
+        int secondlen = getline(&secondbuf, &secondbufsize, fs);
+        if (secondlen == -1) {
+            free(buf);
+            return NULL;
+        }
+        secondbuf[secondlen - 1] = '\0';
+        secondlen--;
+
+        if (bufsize < len + secondlen + 1) {
+            bufsize = 2 * (len + secondlen) + 1;
+            buf = realloc(buf, bufsize);
+        }
+
+        len += secondlen;
+        strcat(buf, secondbuf);
+        free(secondbuf);
+    }
+
+    return buf;
 }
 
 int main(int argc, char** argv, char** envp)
@@ -73,6 +101,8 @@ int main(int argc, char** argv, char** envp)
         free_run_tree(n);
         free_token_list(tl);
     }
+
+    end_env();
 
     return 0;
 }

@@ -1,9 +1,9 @@
 #define _GNU_SOURCE
-#include <builtins.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <parser.h>
+#include <shell.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,22 +11,6 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-void free_run_tree(node_t* n)
-{
-    while (n != NULL) {
-        node_t* next = n->next;
-        if (n->in != NULL && n->in->fd != -1)
-            close(n->in->fd);
-        free(n->in);
-        if (n->out != NULL && n->out->fd != -1)
-            close(n->out->fd);
-        free(n->out);
-        free(n->cmd);
-        free(n);
-        n = next;
-    }
-}
 
 static int handle_pipe(stream_t* read_end, stream_t* write_end)
 {
@@ -75,17 +59,6 @@ int handle_streams(node_t* n)
     return 1;
 }
 
-struct {
-    char** global;
-    //     dict_t* local;
-} env;
-
-void init_env(char** envp)
-{
-    env.global = envp;
-    //     local = NULL;
-}
-
 void run(node_t* tree)
 {
     node_t* n = tree;
@@ -100,6 +73,8 @@ void run(node_t* tree)
     while (n != NULL) {
         if (is_builtin(n->cmd[0]))
             builtin(n->cmd);
+        else if (is_var_assign(n->cmd[0]))
+            var_assign(n->cmd[0]);
         else {
             int errpipe[2];
             if (pipe(errpipe) == -1) {
@@ -107,7 +82,10 @@ void run(node_t* tree)
                 return;
             }
 
+            // constructed before forking to take advantage of caching
+            char** env = get_env();
             int p = fork();
+
             if (p == 0) {
                 close(errpipe[0]);
                 int flags = fcntl(errpipe[1], F_GETFD);
@@ -121,7 +99,7 @@ void run(node_t* tree)
                     dup2(n->out->fd, STDOUT_FILENO);
                     close(n->out->fd);
                 }
-                if (execvpe(n->cmd[0], n->cmd, env.global) == -1) {
+                if (execvpe(n->cmd[0], n->cmd, env) == -1) {
                     write(errpipe[1], &errno, sizeof(errno));
                     close(errpipe[1]);
                     exit(0);
@@ -131,7 +109,7 @@ void run(node_t* tree)
 
                 int exec_errno;
 
-                if (read(errpipe[0], &exec_errno, 4) > 0) {
+                if (read(errpipe[0], &exec_errno, sizeof(exec_errno)) > 0) {
                     switch (exec_errno) {
                     case ENOENT:
                         post_err("%s: file not found", n->cmd[0]);
@@ -163,5 +141,21 @@ void run(node_t* tree)
     while (n != NULL) {
         waitpid(n->pid, NULL, 0);
         n = n->next;
+    }
+}
+
+void free_run_tree(node_t* n)
+{
+    while (n != NULL) {
+        node_t* next = n->next;
+        if (n->in != NULL && n->in->fd != -1)
+            close(n->in->fd);
+        free(n->in);
+        if (n->out != NULL && n->out->fd != -1)
+            close(n->out->fd);
+        free(n->out);
+        free(n->cmd);
+        free(n);
+        n = next;
     }
 }
